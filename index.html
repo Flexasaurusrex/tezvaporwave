@@ -355,9 +355,15 @@
                     Connected: <span id="wallet-address"></span>
                 </div>
                 
-                <button class="btn" id="connect-btn" onclick="connectWallet()" disabled>
-                    Loading Wallet...
+                <button class="btn" id="connect-btn" onclick="connectWallet()">
+                    Connect Wallet
                 </button>
+                
+                <script>
+                    // Enable button IMMEDIATELY
+                    console.log("Enabling connect button right now!");
+                    document.getElementById('connect-btn').disabled = false;
+                </script>
                 
                 <button class="btn" id="mint-btn" onclick="mint()" disabled>
                     Mint for 5 ꜩ
@@ -1117,67 +1123,71 @@
         
         async function connectWallet() {
             try {
-                console.log("=== Connect Wallet Clicked ===");
+                console.log("=== Connect Wallet Button Clicked ===");
+                updateStatus("Connecting...", "status");
                 
-                // Try to initialize if not ready
+                // Try to load Beacon if not loaded
+                if (typeof beacon === 'undefined') {
+                    console.error("Beacon library not loaded!");
+                    updateStatus("Please refresh the page and try again.", "error");
+                    alert("Beacon library not loaded. Please refresh the page.");
+                    return;
+                }
+                
+                // Create DAppClient if needed
                 if (!dAppClient) {
-                    console.log("DAppClient not initialized, attempting now...");
-                    updateStatus("Setting up wallet connection...", "status");
-                    
-                    if (typeof beacon === 'undefined') {
-                        throw new Error("Beacon SDK not loaded. Please refresh the page.");
-                    }
-                    
+                    console.log("Creating DAppClient...");
                     dAppClient = new beacon.DAppClient({ 
                         name: "Vaporwave Nature"
                     });
                     console.log("✓ DAppClient created");
                 }
                 
-                // Initialize Taquito if not ready
+                // Create Taquito if needed
                 if (!Tezos && typeof taquito !== 'undefined') {
+                    console.log("Creating Taquito...");
                     Tezos = new taquito.TezosToolkit(RPC_URL);
-                    console.log("✓ Taquito initialized");
+                    console.log("✓ Taquito created");
                 }
                 
-                updateStatus("Opening wallet connection dialog...", "status");
-                console.log("Requesting permissions...");
+                updateStatus("Opening wallet...", "status");
+                console.log("Requesting permissions from wallet...");
                 
-                // Request permissions
+                // Request permissions - this opens the wallet popup
                 const permissions = await dAppClient.requestPermissions({
                     network: {
-                        type: "mainnet" // or "ghostnet" for testnet
+                        type: "mainnet"
                     }
                 });
                 
-                console.log("✓ Permissions granted");
+                console.log("✓ Permissions granted!");
                 console.log("Connected address:", permissions.address);
                 
                 userAddress = permissions.address;
                 
-                // Set up wallet provider
-                const walletProvider = new SimpleWalletProvider(dAppClient);
-                Tezos.setWalletProvider(walletProvider);
+                // Set up Taquito if we have it
+                if (Tezos) {
+                    const walletProvider = new SimpleWalletProvider(dAppClient);
+                    Tezos.setWalletProvider(walletProvider);
+                }
                 
                 updateWalletUI(true);
-                updateStatus("Wallet connected successfully! 🎉", "success");
+                updateStatus("✓ Wallet connected successfully!", "success");
                 
                 console.log("=== Connection Successful ===");
                 
             } catch (error) {
                 console.error("=== Connection Failed ===");
-                console.error("Error type:", error.name);
-                console.error("Error message:", error.message);
-                console.error("Full error:", error);
+                console.error("Error:", error);
                 
-                if (error.name === "AbortedBeaconError" || error.message.includes("Aborted")) {
+                if (error.name === "AbortedBeaconError" || error.message?.includes("Aborted")) {
                     updateStatus("Connection cancelled by user", "error");
-                } else if (error.message.includes("No transport")) {
-                    updateStatus("No Tezos wallet found. Please install Temple, Kukai, or Umami wallet.", "error");
-                } else if (error.message.includes("Beacon SDK not loaded")) {
-                    updateStatus("Wallet libraries not loaded. Please refresh the page.", "error");
+                } else if (error.message?.includes("No transport")) {
+                    updateStatus("No Tezos wallet found. Install Temple, Kukai, or Umami.", "error");
+                    alert("No Tezos wallet detected. Please install:\n- Temple Wallet\n- Kukai\n- Umami");
                 } else {
                     updateStatus("Connection failed: " + error.message, "error");
+                    alert("Connection failed: " + error.message);
                 }
             }
         }
