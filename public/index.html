@@ -412,8 +412,8 @@
     
     <script>
         // Configuration
-        const CONTRACT_ADDRESS = "KT1BAhYiveR7meFqzbZj7jUya5CoYXwoYoVz"; // UPDATE THIS after deployment
-        const RPC_URL = "https://mainnet.api.tez.ie"; // Mainnet
+        const CONTRACT_ADDRESS = "KT1BAhYiveR7meFqzbZj7jUya5CoYXwoYoVz";
+        const RPC_URL = "https://mainnet.api.tez.ie";
         
         let Tezos;
         let dAppClient;
@@ -421,46 +421,14 @@
         let currentTokenId = 0;
         let p5Instance;
         
-        // Simple wallet provider
-        class SimpleWalletProvider {
-            constructor(client) {
-                this.client = client;
-            }
-            
-            async getPKH() {
-                const account = await this.client.getActiveAccount();
-                if (!account) throw new Error('No active account');
-                return account.address;
-            }
-            
-            async mapTransferParamsToWalletParams(params) {
-                return params;
-            }
-            
-            async sendOperations(params) {
-                const account = await this.client.getActiveAccount();
-                if (!account) throw new Error('No active account');
-                
-                const { transactionHash } = await this.client.requestOperation({
-                    operationDetails: params
-                });
-                
-                return transactionHash;
-            }
-        }
-        
         // Initialize
         async function init() {
             console.log("=== Initializing ===");
             
-            // Create p5 instance with deterministic art engine
             p5Instance = new p5(vaporwaveSketch);
-            
-            // Wait a bit for p5 to set up
             await new Promise(resolve => setTimeout(resolve, 500));
             
             try {
-                // Check if libraries loaded
                 if (typeof taquito === 'undefined' || typeof beacon === 'undefined') {
                     updateStatus("Libraries loading...", "status");
                     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -476,24 +444,21 @@
                 });
                 console.log("✓ DAppClient created");
                 
-                // Check for existing connection
                 const activeAccount = await dAppClient.getActiveAccount();
                 
                 if (activeAccount) {
                     userAddress = activeAccount.address;
                     console.log("✓ Found existing connection:", userAddress);
                     
-                    const walletProvider = new SimpleWalletProvider(dAppClient);
-                    Tezos.setWalletProvider(walletProvider);
+                    // Set wallet provider
+                    Tezos.setWalletProvider(new beacon.BeaconWallet(dAppClient));
                     
                     updateWalletUI(true);
                 } else {
                     updateStatus("Connect your wallet to mint", "status");
                 }
                 
-                // Load contract stats
                 await loadContractStats();
-                
                 console.log("=== Initialization Complete ===");
                 
             } catch (error) {
@@ -513,7 +478,7 @@
                     });
                 }
                 
-                if (!Tezos && typeof taquito !== 'undefined') {
+                if (!Tezos) {
                     Tezos = new taquito.TezosToolkit(RPC_URL);
                 }
                 
@@ -528,10 +493,8 @@
                 console.log("✓ Permissions granted!");
                 userAddress = permissions.address;
                 
-                if (Tezos) {
-                    const walletProvider = new SimpleWalletProvider(dAppClient);
-                    Tezos.setWalletProvider(walletProvider);
-                }
+                // Set wallet provider
+                Tezos.setWalletProvider(new beacon.BeaconWallet(dAppClient));
                 
                 updateWalletUI(true);
                 updateStatus("✓ Wallet connected!", "success");
@@ -541,8 +504,6 @@
                 
                 if (error.name === "AbortedBeaconError" || error.message?.includes("Aborted")) {
                     updateStatus("Connection cancelled", "error");
-                } else if (error.message?.includes("No transport")) {
-                    updateStatus("No Tezos wallet found. Install Temple, Kukai, or Umami.", "error");
                 } else {
                     updateStatus("Connection failed: " + error.message, "error");
                 }
@@ -555,28 +516,27 @@
                 return;
             }
             
-            if (CONTRACT_ADDRESS === "KT1...") {
-                updateStatus("Contract not deployed yet", "error");
-                alert("Contract not deployed yet. Please update CONTRACT_ADDRESS in the HTML.");
-                return;
-            }
-            
             try {
                 updateStatus("Preparing transaction...", "status");
                 document.getElementById('mint-btn').disabled = true;
                 
+                console.log("Getting contract at:", CONTRACT_ADDRESS);
                 const contract = await Tezos.wallet.at(CONTRACT_ADDRESS);
+                console.log("✓ Contract loaded");
                 
                 updateStatus("Please confirm in your wallet...", "status");
+                console.log("Calling mint()...");
                 
                 const operation = await contract.methods.mint().send({
                     amount: 5,
                     mutez: false
                 });
                 
+                console.log("✓ Operation sent:", operation.opHash);
                 updateStatus("Transaction submitted! Waiting for confirmation...", "status");
                 
-                await operation.confirmation();
+                const confirmation = await operation.confirmation();
+                console.log("✓ Confirmed:", confirmation);
                 
                 updateStatus(`Mint successful! You minted Token #${currentTokenId}! 🎉`, "success");
                 
@@ -588,28 +548,30 @@
                 
             } catch (error) {
                 console.error("Mint error:", error);
-                updateStatus("Mint failed: " + error.message, "error");
+                console.error("Error details:", JSON.stringify(error, null, 2));
+                
+                let errorMsg = "Mint failed: ";
+                if (error.message) {
+                    errorMsg += error.message;
+                } else if (error.description) {
+                    errorMsg += error.description;
+                } else {
+                    errorMsg += "Unknown error. Check console.";
+                }
+                
+                updateStatus(errorMsg, "error");
                 document.getElementById('mint-btn').disabled = false;
             }
         }
         
         async function loadContractStats() {
             try {
-                if (CONTRACT_ADDRESS === "KT1...") {
-                    // Contract not deployed, show defaults
-                    currentTokenId = 0;
-                    document.getElementById('minted-count').textContent = "0";
-                    updatePreviewDisplay();
-                    return;
-                }
-                
                 const contract = await Tezos.contract.at(CONTRACT_ADDRESS);
                 const storage = await contract.storage();
                 
                 currentTokenId = parseInt(storage.next_token_id.toString());
                 document.getElementById('minted-count').textContent = currentTokenId;
                 
-                // Show preview of the NEXT token that will be minted
                 updatePreviewDisplay();
                 
             } catch (error) {
@@ -621,11 +583,9 @@
         }
         
         function updatePreviewDisplay() {
-            // Update text
             document.getElementById('preview-token-id').textContent = currentTokenId;
             document.getElementById('mint-token-id').textContent = currentTokenId;
             
-            // Generate art for this token ID
             if (window.generateFromTokenId) {
                 window.generateFromTokenId(currentTokenId);
             }
@@ -665,7 +625,6 @@
             statusEl.className = `status ${type}`;
         }
         
-        // Initialize on load
         window.addEventListener('load', init);
     </script>
 </body>
