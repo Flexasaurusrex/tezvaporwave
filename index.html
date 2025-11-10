@@ -981,6 +981,9 @@
     
     <!-- Tezos Wallet Integration -->
     <script>
+        console.log("🚀 Wallet script loaded!");
+        console.log("Current time:", new Date().toLocaleTimeString());
+        
         // Configuration
         const CONTRACT_ADDRESS = "KT1..."; // Replace with your deployed contract address
         const RPC_URL = "https://mainnet.api.tez.ie"; // Mainnet
@@ -1055,16 +1058,23 @@
         
         // Initialize
         async function init() {
-            try {
-                console.log("=== Initializing Tezos Integration ===");
-                
-                // Always enable the button after a short delay
-                setTimeout(() => {
-                    const connectBtn = document.getElementById('connect-btn');
+            console.log("=== Init Started ===");
+            
+            // ALWAYS enable button after 1 second, no matter what
+            setTimeout(() => {
+                console.log("Enabling button now...");
+                const connectBtn = document.getElementById('connect-btn');
+                if (connectBtn) {
                     connectBtn.disabled = false;
                     connectBtn.textContent = "Connect Wallet";
-                    console.log("Connect button enabled");
-                }, 2000);
+                    console.log("✓ Button enabled!");
+                } else {
+                    console.error("✗ Button not found!");
+                }
+            }, 1000);
+            
+            try {
+                console.log("Checking dependencies...");
                 
                 await waitForDependencies();
                 
@@ -1101,14 +1111,7 @@
             } catch (error) {
                 console.error("=== Initialization Failed ===");
                 console.error("Error:", error);
-                
-                // Still enable the button
-                const connectBtn = document.getElementById('connect-btn');
-                connectBtn.disabled = false;
-                connectBtn.textContent = "Connect Wallet (Try Anyway)";
-                
-                updateStatus("Libraries may not have loaded. You can still try to connect.", "error");
-                console.log("You can still click Connect Wallet to try!");
+                updateStatus("Button still works! Click to try connecting.", "error");
             }
         }
         
