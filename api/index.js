@@ -1,9 +1,4 @@
-const express = require('express');
-const cors = require('cors');
-
-const app = express();
-app.use(cors());
-app.use(express.json());
+// Vercel Serverless Function for Vaporwave Nature Metadata
 
 const MAX_SUPPLY = 100;
 const CREATOR_NAME = "Your Name";
@@ -66,57 +61,115 @@ function calculateRarity(attrs) {
     return score;
 }
 
-app.get('/metadata/:tokenId', (req, res) => {
-    const tokenId = parseInt(req.params.tokenId);
+module.exports = (req, res) => {
+    // Enable CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     
-    if (isNaN(tokenId) || tokenId < 0 || tokenId >= MAX_SUPPLY) {
-        return res.status(404).json({ error: 'Token not found' });
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
     }
     
-    const attrs = generateAttributes(tokenId);
-    const rarity = calculateRarity(attrs);
-    const baseUrl = `https://${req.headers.host}`;
+    const url = new URL(req.url, `https://${req.headers.host}`);
+    const path = url.pathname;
     
-    const metadata = {
-        name: `Vaporwave Nature #${tokenId}`,
-        description: "A generative artwork featuring crystalline formations, layered mountain ranges, and flowing water rendered in nostalgic vaporwave aesthetics.",
-        artifactUri: `${baseUrl}/view/${tokenId}`,
-        displayUri: `${baseUrl}/view/${tokenId}`,
-        thumbnailUri: `${baseUrl}/view/${tokenId}`,
-        creators: [CREATOR_NAME],
-        decimals: 0,
-        symbol: "VAPOR",
-        isBooleanAmount: true,
-        attributes: [
-            { name: "Palette", value: attrs.palette },
-            { name: "Background Style", value: attrs.bgStyle },
-            { name: "Crystal Count", value: attrs.crystalCount.toString() },
-            { name: "Crystal Type", value: attrs.dominantCrystalType },
-            { name: "Crystal Style", value: attrs.crystalStyle },
-            { name: "Mountain Layers", value: attrs.mountainLayers.toString() },
-            { name: "Mountain Style", value: attrs.dominantMountainStyle },
-            { name: "Water Waves", value: attrs.waterWaves.toString() },
-            { name: "Water Style", value: attrs.waterStyle },
-            { name: "Grid Style", value: attrs.gridStyle },
-            { name: "Has Sun", value: attrs.hasSun ? "Yes" : "No" },
-            { name: "Has Moon", value: attrs.hasMoon ? "Yes" : "No" },
-            { name: "Has Stars", value: attrs.hasStars ? "Yes" : "No" },
-            { name: "Glow Effect", value: attrs.hasGlow ? "Yes" : "No" },
-            { name: "Rarity Score", value: rarity.toString() }
-        ],
-        tags: ["generative", "vaporwave", "crystals", "mountains", "water"]
-    };
-    
-    res.json(metadata);
-});
-
-app.get('/view/:tokenId', (req, res) => {
-    const tokenId = parseInt(req.params.tokenId);
-    
-    if (isNaN(tokenId) || tokenId < 0 || tokenId >= MAX_SUPPLY) {
-        return res.status(404).send('Token not found');
+    // Root
+    if (path === '/' || path === '/api/index.js') {
+        return res.json({ 
+            name: "Vaporwave Nature API", 
+            version: "1.0.0",
+            endpoints: ["/metadata/:id", "/view/:id", "/attributes/:id"]
+        });
     }
     
-    const html = `<!DOCTYPE html>
+    // Parse routes
+    const metadataMatch = path.match(/^\/metadata\/(\d+)$/);
+    const viewMatch = path.match(/^\/view\/(\d+)$/);
+    const attributesMatch = path.match(/^\/attributes\/(\d+)$/);
+    
+    // /metadata/:tokenId
+    if (metadataMatch) {
+        const tokenId = parseInt(metadataMatch[1]);
+        
+        if (isNaN(tokenId) || tokenId < 0 || tokenId >= MAX_SUPPLY) {
+            return res.status(404).json({ error: 'Token not found' });
+        }
+        
+        const attrs = generateAttributes(tokenId);
+        const rarity = calculateRarity(attrs);
+        const baseUrl = `https://${req.headers.host}`;
+        
+        const metadata = {
+            name: `Vaporwave Nature #${tokenId}`,
+            description: "A generative artwork featuring crystalline formations, layered mountain ranges, and flowing water rendered in nostalgic vaporwave aesthetics.",
+            artifactUri: `${baseUrl}/view/${tokenId}`,
+            displayUri: `${baseUrl}/view/${tokenId}`,
+            thumbnailUri: `${baseUrl}/view/${tokenId}`,
+            creators: [CREATOR_NAME],
+            decimals: 0,
+            symbol: "VAPOR",
+            isBooleanAmount: true,
+            attributes: [
+                { name: "Palette", value: attrs.palette },
+                { name: "Background Style", value: attrs.bgStyle },
+                { name: "Crystal Count", value: attrs.crystalCount.toString() },
+                { name: "Crystal Type", value: attrs.dominantCrystalType },
+                { name: "Crystal Style", value: attrs.crystalStyle },
+                { name: "Mountain Layers", value: attrs.mountainLayers.toString() },
+                { name: "Mountain Style", value: attrs.dominantMountainStyle },
+                { name: "Water Waves", value: attrs.waterWaves.toString() },
+                { name: "Water Style", value: attrs.waterStyle },
+                { name: "Grid Style", value: attrs.gridStyle },
+                { name: "Has Sun", value: attrs.hasSun ? "Yes" : "No" },
+                { name: "Has Moon", value: attrs.hasMoon ? "Yes" : "No" },
+                { name: "Has Stars", value: attrs.hasStars ? "Yes" : "No" },
+                { name: "Glow Effect", value: attrs.hasGlow ? "Yes" : "No" },
+                { name: "Rarity Score", value: rarity.toString() }
+            ],
+            tags: ["generative", "vaporwave", "crystals", "mountains", "water"]
+        };
+        
+        return res.json(metadata);
+    }
+    
+    // /view/:tokenId
+    if (viewMatch) {
+        const tokenId = parseInt(viewMatch[1]);
+        
+        if (isNaN(tokenId) || tokenId < 0 || tokenId >= MAX_SUPPLY) {
+            return res.status(404).send('Token not found');
+        }
+        
+        const html = `<!DOCTYPE html>
 <html><head><title>Vaporwave Nature #${tokenId}</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script></head>
+<body style="margin:0;background:#000;">
+<script src="/js/vaporwave-deterministic.js"></script>
+<script>
+const sketch = new p5(vaporwaveSketch); 
+setTimeout(() => { window.generateFromTokenId(${tokenId}); }, 100);
+</script>
+</body></html>`;
+        
+        res.setHeader('Content-Type', 'text/html');
+        return res.send(html);
+    }
+    
+    // /attributes/:tokenId
+    if (attributesMatch) {
+        const tokenId = parseInt(attributesMatch[1]);
+        
+        if (isNaN(tokenId) || tokenId < 0 || tokenId >= MAX_SUPPLY) {
+            return res.status(404).json({ error: 'Token not found' });
+        }
+        
+        const attrs = generateAttributes(tokenId);
+        const rarity = calculateRarity(attrs);
+        
+        return res.json({ tokenId, ...attrs, rarityScore: rarity });
+    }
+    
+    // 404
+    return res.status(404).json({ error: 'Not found' });
+};
