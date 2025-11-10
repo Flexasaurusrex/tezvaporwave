@@ -6,7 +6,7 @@
     <title>Vaporwave Nature - Tezos NFT Mint</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
     <script src="https://unpkg.com/@taquito/taquito@19.0.0/dist/taquito.min.js"></script>
-    <script src="https://unpkg.com/@airgap/beacon-sdk@4.2.2/dist/walletbeacon.min.js"></script>
+    <script src="https://unpkg.com/@taquito/beacon-wallet@19.0.0/dist/taquito-beacon-wallet.umd.js"></script>
     
     <!-- Load deterministic art engine -->
     <script src="/js/vaporwave-deterministic.js"></script>
@@ -416,7 +416,7 @@
         const RPC_URL = "https://mainnet.api.tez.ie";
         
         let Tezos;
-        let dAppClient;
+        let wallet;
         let userAddress;
         let currentTokenId = 0;
         let p5Instance;
@@ -429,7 +429,7 @@
             await new Promise(resolve => setTimeout(resolve, 500));
             
             try {
-                if (typeof taquito === 'undefined' || typeof beacon === 'undefined') {
+                if (typeof taquito === 'undefined' || typeof taquitoBeaconWallet === 'undefined') {
                     updateStatus("Libraries loading...", "status");
                     await new Promise(resolve => setTimeout(resolve, 2000));
                 }
@@ -438,21 +438,20 @@
                 Tezos = new taquito.TezosToolkit(RPC_URL);
                 console.log("✓ Taquito created");
                 
-                console.log("Creating Beacon DAppClient...");
-                dAppClient = new beacon.DAppClient({ 
-                    name: "Vaporwave Nature"
+                console.log("Creating Beacon Wallet...");
+                wallet = new taquitoBeaconWallet.BeaconWallet({
+                    name: "Vaporwave Nature",
+                    preferredNetwork: "mainnet"
                 });
-                console.log("✓ DAppClient created");
+                console.log("✓ Wallet created");
                 
-                const activeAccount = await dAppClient.getActiveAccount();
+                Tezos.setWalletProvider(wallet);
+                
+                const activeAccount = await wallet.client.getActiveAccount();
                 
                 if (activeAccount) {
                     userAddress = activeAccount.address;
                     console.log("✓ Found existing connection:", userAddress);
-                    
-                    // Set wallet provider
-                    Tezos.setWalletProvider(new beacon.BeaconWallet(dAppClient));
-                    
                     updateWalletUI(true);
                 } else {
                     updateStatus("Connect your wallet to mint", "status");
@@ -472,29 +471,24 @@
                 console.log("=== Connect Wallet Clicked ===");
                 updateStatus("Connecting...", "status");
                 
-                if (!dAppClient) {
-                    dAppClient = new beacon.DAppClient({ 
-                        name: "Vaporwave Nature"
+                if (!wallet) {
+                    wallet = new taquitoBeaconWallet.BeaconWallet({
+                        name: "Vaporwave Nature",
+                        preferredNetwork: "mainnet"
                     });
-                }
-                
-                if (!Tezos) {
-                    Tezos = new taquito.TezosToolkit(RPC_URL);
+                    Tezos.setWalletProvider(wallet);
                 }
                 
                 updateStatus("Opening wallet...", "status");
                 
-                const permissions = await dAppClient.requestPermissions({
+                await wallet.requestPermissions({
                     network: {
                         type: "mainnet"
                     }
                 });
                 
-                console.log("✓ Permissions granted!");
-                userAddress = permissions.address;
-                
-                // Set wallet provider
-                Tezos.setWalletProvider(new beacon.BeaconWallet(dAppClient));
+                userAddress = await wallet.getPKH();
+                console.log("✓ Connected:", userAddress);
                 
                 updateWalletUI(true);
                 updateStatus("✓ Wallet connected!", "success");
@@ -533,12 +527,13 @@
                 });
                 
                 console.log("✓ Operation sent:", operation.opHash);
-                updateStatus("Transaction submitted! Waiting for confirmation...", "status");
+                updateStatus(`Transaction submitted! Hash: ${operation.opHash.substring(0, 10)}...`, "status");
                 
+                updateStatus("Waiting for confirmation...", "status");
                 const confirmation = await operation.confirmation();
                 console.log("✓ Confirmed:", confirmation);
                 
-                updateStatus(`Mint successful! You minted Token #${currentTokenId}! 🎉`, "success");
+                updateStatus(`🎉 Mint successful! You minted Token #${currentTokenId}!`, "success");
                 
                 await loadContractStats();
                 
