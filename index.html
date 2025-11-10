@@ -311,24 +311,12 @@
             color: #01CDFE;
             font-size: 0.9rem;
         }
-        
-        .glitch-text {
-            position: relative;
-            animation: glitchText 5s infinite;
-        }
-        
-        @keyframes glitchText {
-            0%, 90%, 100% { transform: translate(0); }
-            91% { transform: translate(-2px, -2px); }
-            92% { transform: translate(2px, 2px); }
-            93% { transform: translate(-2px, 2px); }
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1 class="glitch-text">VAPORWAVE NATURE</h1>
+            <h1>VAPORWAVE NATURE</h1>
             <p class="subtitle">Generative NFTs on Tezos</p>
         </header>
         
@@ -337,7 +325,7 @@
             <div class="card">
                 <h2 class="card-title">Preview</h2>
                 <div id="canvas-container"></div>
-                <button class="btn btn-secondary" onclick="generateNewPreview()">
+                <button class="btn btn-secondary" onclick="regenerate()">
                     ⟳ Generate New Preview
                 </button>
             </div>
@@ -406,6 +394,297 @@
         </footer>
     </div>
     
+    <!-- Vaporwave Art Engine (inline) -->
+    <script>
+        // Art generation code inline
+        const vaporwaveSketch = function(p) {
+            let tokenHash;
+            let vaporwavePalettes = [
+                ['#FF6EFF', '#00FFFF', '#FF10F0', '#01CDFE', '#B967FF'],
+                ['#FE53BB', '#08F7FE', '#09FBD3', '#F5D300', '#FF006E'],
+                ['#FF71CE', '#01CDFE', '#05FFA1', '#B967FF', '#FFFB96'],
+                ['#FFB3FD', '#2DE2E6', '#F260AA', '#261447', '#FF9CEE']
+            ];
+
+            let mountains = [];
+            let crystals = [];
+            let waves = [];
+            let palette;
+            let bgGradient;
+            let gridAlpha;
+
+            p.setup = function() {
+                let canvas = p.createCanvas(800, 800);
+                canvas.parent('canvas-container');
+                p.noLoop();
+                
+                if (!tokenHash) {
+                    tokenHash = generateRandomHash();
+                }
+                
+                initializeFromHash(tokenHash);
+                drawGenerativeArt();
+                console.log('✓ Art generated successfully');
+            }
+
+            function generateRandomHash() {
+                let hash = '0x';
+                for (let i = 0; i < 64; i++) {
+                    hash += p.floor(p.random(16)).toString(16);
+                }
+                return hash;
+            }
+
+            function initializeFromHash(hash) {
+                let seed = 0;
+                for (let i = 2; i < hash.length; i++) {
+                    seed += parseInt(hash[i], 16);
+                }
+                p.randomSeed(seed);
+                p.noiseSeed(seed);
+                
+                let paletteIndex = p.floor(p.map(parseInt(hash.substr(2, 4), 16), 0, 65536, 0, vaporwavePalettes.length));
+                palette = vaporwavePalettes[paletteIndex];
+                
+                bgGradient = {
+                    top: p.color(parseInt(hash.substr(6, 2), 16), parseInt(hash.substr(8, 2), 16), parseInt(hash.substr(10, 2), 16) + 100),
+                    bottom: p.color(parseInt(hash.substr(12, 2), 16) + 50, parseInt(hash.substr(14, 2), 16), parseInt(hash.substr(16, 2), 16) + 50)
+                };
+                
+                gridAlpha = p.map(parseInt(hash.substr(18, 2), 16), 0, 255, 10, 40);
+                
+                mountains = [];
+                let numMountainLayers = p.floor(p.map(parseInt(hash.substr(22, 2), 16), 0, 255, 3, 6));
+                for (let i = 0; i < numMountainLayers; i++) {
+                    mountains.push({
+                        y: p.map(i, 0, numMountainLayers, p.height * 0.4, p.height * 0.8),
+                        peaks: p.floor(p.map(parseInt(hash.substr(24 + i * 2, 2), 16), 0, 255, 4, 8)),
+                        color: palette[i % palette.length],
+                        alpha: p.map(i, 0, numMountainLayers - 1, 180, 80),
+                        roughness: p.map(parseInt(hash.substr(30 + i, 2), 16), 0, 255, 0.3, 0.8)
+                    });
+                }
+                
+                crystals = [];
+                let numCrystals = p.floor(p.map(parseInt(hash.substr(40, 2), 16), 0, 255, 5, 13));
+                for (let i = 0; i < numCrystals; i++) {
+                    let hashOffset = 42 + i * 4;
+                    crystals.push({
+                        x: p.map(parseInt(hash.substr(hashOffset, 2), 16), 0, 255, p.width * 0.1, p.width * 0.9),
+                        y: p.map(parseInt(hash.substr(hashOffset + 2, 2), 16), 0, 255, p.height * 0.3, p.height * 0.7),
+                        size: p.map(parseInt(hash.substr(hashOffset + 4, 2), 16), 0, 255, 30, 120),
+                        rotation: p.map(parseInt(hash.substr(hashOffset + 6, 2), 16), 0, 255, -p.PI/6, p.PI/6),
+                        faces: p.floor(p.map(parseInt(hash.substr(hashOffset + 8, 1), 16), 0, 15, 3, 7)),
+                        color: palette[i % palette.length],
+                        wireframe: parseInt(hash.substr(hashOffset + 10, 1), 16) > 8
+                    });
+                }
+                
+                waves = [];
+                for (let i = 0; i < 8; i++) {
+                    waves.push({
+                        y: p.height * 0.75 + i * 15,
+                        amplitude: p.map(i, 0, 8, 15, 5),
+                        frequency: p.map(i, 0, 8, 0.01, 0.02),
+                        phase: p.random(p.TWO_PI),
+                        color: palette[i % palette.length],
+                        alpha: p.map(i, 0, 8, 100, 30)
+                    });
+                }
+            }
+
+            function drawGenerativeArt() {
+                drawGradient();
+                drawGrid();
+                drawWater();
+                drawMountains();
+                drawCrystals();
+                drawScanlines();
+                drawVignette();
+                
+                p.noFill();
+                p.strokeWeight(3);
+                p.stroke(palette[0]);
+                p.rect(10, 10, p.width - 20, p.height - 20);
+            }
+
+            function drawGradient() {
+                for (let y = 0; y < p.height; y++) {
+                    let inter = p.map(y, 0, p.height, 0, 1);
+                    let c = p.lerpColor(bgGradient.top, bgGradient.bottom, inter);
+                    p.stroke(c);
+                    p.line(0, y, p.width, y);
+                }
+            }
+
+            function drawGrid() {
+                p.stroke(255, 255, 255, gridAlpha);
+                p.strokeWeight(1);
+                
+                let gridSize = 40;
+                
+                for (let y = p.height * 0.6; y < p.height; y += gridSize) {
+                    let fade = p.map(y, p.height * 0.6, p.height, 1, 0.3);
+                    p.stroke(255, 255, 255, gridAlpha * fade);
+                    p.line(0, y, p.width, y);
+                }
+                
+                for (let x = 0; x < p.width; x += gridSize) {
+                    p.stroke(255, 255, 255, gridAlpha * 0.5);
+                    p.line(x, p.height * 0.6, x, p.height);
+                }
+            }
+
+            function drawMountains() {
+                for (let mountain of mountains) {
+                    p.fill(mountain.color);
+                    p.stroke(mountain.color);
+                    p.strokeWeight(2);
+                    
+                    p.beginShape();
+                    p.vertex(0, p.height);
+                    
+                    for (let x = 0; x <= p.width; x += p.width / mountain.peaks / 2) {
+                        let noiseVal = p.noise(x * 0.01 * mountain.roughness, mountain.y * 0.01);
+                        let peakHeight = p.map(noiseVal, 0, 1, mountain.y, mountain.y - p.height * 0.3);
+                        p.vertex(x, peakHeight);
+                    }
+                    
+                    p.vertex(p.width, p.height);
+                    p.endShape(p.CLOSE);
+                    
+                    p.stroke(255, 255, 255, 50);
+                    p.strokeWeight(1);
+                    p.noFill();
+                    p.beginShape();
+                    for (let x = 0; x <= p.width; x += p.width / mountain.peaks / 2) {
+                        let noiseVal = p.noise(x * 0.01 * mountain.roughness, mountain.y * 0.01);
+                        let peakHeight = p.map(noiseVal, 0, 1, mountain.y, mountain.y - p.height * 0.3);
+                        p.vertex(x, peakHeight - 2);
+                    }
+                    p.endShape();
+                }
+            }
+
+            function drawCrystals() {
+                for (let crystal of crystals) {
+                    p.push();
+                    p.translate(crystal.x, crystal.y);
+                    p.rotate(crystal.rotation);
+                    
+                    if (crystal.wireframe) {
+                        p.noFill();
+                        p.stroke(crystal.color);
+                        p.strokeWeight(2);
+                    } else {
+                        p.fill(crystal.color);
+                        p.stroke(255, 255, 255, 150);
+                        p.strokeWeight(2);
+                    }
+                    
+                    p.beginShape();
+                    for (let i = 0; i < crystal.faces; i++) {
+                        let angle = p.TWO_PI * i / crystal.faces;
+                        let r = crystal.size;
+                        let x = p.cos(angle) * r;
+                        let y = p.sin(angle) * r;
+                        p.vertex(x, y);
+                    }
+                    p.endShape(p.CLOSE);
+                    
+                    if (!crystal.wireframe) {
+                        p.fill(255, 255, 255, 100);
+                        p.noStroke();
+                        p.beginShape();
+                        for (let i = 0; i < crystal.faces; i++) {
+                            let angle = p.TWO_PI * i / crystal.faces;
+                            let r = crystal.size * 0.5;
+                            let x = p.cos(angle) * r;
+                            let y = p.sin(angle) * r;
+                            p.vertex(x, y);
+                        }
+                        p.endShape(p.CLOSE);
+                    }
+                    
+                    p.drawingContext.shadowBlur = 20;
+                    p.drawingContext.shadowColor = crystal.color;
+                    
+                    p.pop();
+                    p.drawingContext.shadowBlur = 0;
+                }
+            }
+
+            function drawWater() {
+                p.noStroke();
+                
+                for (let wave of waves) {
+                    let waveColor = p.color(wave.color);
+                    waveColor.setAlpha(wave.alpha);
+                    p.fill(waveColor);
+                    
+                    p.beginShape();
+                    p.vertex(0, p.height);
+                    
+                    for (let x = 0; x <= p.width; x += 5) {
+                        let y = wave.y + p.sin(x * wave.frequency + wave.phase) * wave.amplitude;
+                        p.vertex(x, y);
+                    }
+                    
+                    p.vertex(p.width, p.height);
+                    p.endShape(p.CLOSE);
+                }
+                
+                for (let i = 0; i < 20; i++) {
+                    let x = p.random(p.width);
+                    let y = p.random(p.height * 0.75, p.height);
+                    p.fill(255, 255, 255, p.random(30, 80));
+                    p.noStroke();
+                    p.ellipse(x, y, p.random(2, 8), p.random(1, 3));
+                }
+            }
+
+            function drawScanlines() {
+                p.stroke(0, 0, 0, 30);
+                p.strokeWeight(1);
+                for (let y = 0; y < p.height; y += 4) {
+                    p.line(0, y, p.width, y);
+                }
+            }
+
+            function drawVignette() {
+                p.drawingContext.globalCompositeOperation = 'multiply';
+                let gradient = p.drawingContext.createRadialGradient(p.width/2, p.height/2, 0, p.width/2, p.height/2, p.width * 0.7);
+                gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                gradient.addColorStop(1, 'rgba(0, 0, 0, 0.7)');
+                p.drawingContext.fillStyle = gradient;
+                p.drawingContext.fillRect(0, 0, p.width, p.height);
+                p.drawingContext.globalCompositeOperation = 'source-over';
+            }
+
+            window.regenerateArt = function() {
+                console.log('Regenerating art...');
+                tokenHash = generateRandomHash();
+                mountains = [];
+                crystals = [];
+                waves = [];
+                initializeFromHash(tokenHash);
+                p.clear();
+                drawGenerativeArt();
+            }
+        };
+
+        // Create p5 instance
+        new p5(vaporwaveSketch);
+        
+        // Make regenerate function globally accessible
+        function regenerate() {
+            if (window.regenerateArt) {
+                window.regenerateArt();
+            }
+        }
+    </script>
+    
+    <!-- Tezos Wallet Integration -->
     <script>
         // Configuration
         const CONTRACT_ADDRESS = "KT1..."; // Replace with your deployed contract address
@@ -415,30 +694,22 @@
         let Tezos;
         let wallet;
         let userAddress;
-        let p5Instance;
         
-        // Wait for all dependencies to load
+        // Wait for dependencies
         function waitForDependencies() {
             return new Promise((resolve, reject) => {
                 let attempts = 0;
-                const maxAttempts = 100; // 10 seconds
+                const maxAttempts = 100;
                 
                 const checkInterval = setInterval(() => {
                     attempts++;
                     
-                    if (typeof tezos !== 'undefined' && 
-                        typeof window.beacon !== 'undefined' && 
-                        typeof p5 !== 'undefined') {
+                    if (typeof tezos !== 'undefined' && typeof window.beacon !== 'undefined') {
                         clearInterval(checkInterval);
-                        console.log("All dependencies loaded!");
                         resolve();
                     } else if (attempts >= maxAttempts) {
                         clearInterval(checkInterval);
-                        console.error("Timeout waiting for dependencies");
-                        console.error("Taquito loaded:", typeof tezos !== 'undefined');
-                        console.error("Beacon loaded:", typeof window.beacon !== 'undefined');
-                        console.error("p5 loaded:", typeof p5 !== 'undefined');
-                        reject(new Error("Dependencies failed to load"));
+                        reject(new Error("Tezos dependencies failed to load"));
                     }
                 }, 100);
             });
@@ -447,47 +718,31 @@
         // Initialize
         async function init() {
             try {
-                console.log("Waiting for dependencies to load...");
-                
+                console.log("Waiting for Tezos dependencies...");
                 await waitForDependencies();
                 
-                console.log("Dependencies loaded successfully");
-                console.log("- Taquito:", typeof tezos);
-                console.log("- Beacon:", typeof window.beacon);
-                console.log("- p5:", typeof p5);
-                
-                // Initialize Taquito
                 Tezos = new tezos.TezosToolkit(RPC_URL);
-                console.log("✓ Taquito initialized");
-                
-                // Initialize Beacon SDK
                 const { DAppClient } = window.beacon;
                 wallet = new DAppClient({ name: "Vaporwave Nature" });
-                console.log("✓ Beacon wallet initialized");
                 
-                // Check for existing connection
                 const activeAccount = await wallet.getActiveAccount();
                 if (activeAccount) {
                     userAddress = activeAccount.address;
-                    console.log("✓ Found existing connection:", userAddress);
                     Tezos.setWalletProvider(wallet);
                     updateWalletUI(true);
                 } else {
                     updateStatus("Wallet not connected", "status");
                 }
                 
-                // Load contract stats (only if contract deployed)
                 if (CONTRACT_ADDRESS !== "KT1...") {
                     await loadContractStats();
-                } else {
-                    console.log("Contract not deployed yet - using placeholder address");
                 }
                 
                 console.log("✓ Initialization complete!");
                 
             } catch (error) {
                 console.error("Error during initialization:", error);
-                updateStatus("Failed to load libraries. Please refresh the page.", "error");
+                updateStatus("Wallet features unavailable. Art still works!", "error");
             }
         }
         
@@ -496,21 +751,16 @@
                 updateStatus("Connecting wallet...", "status");
                 
                 if (!wallet) {
-                    throw new Error("Beacon SDK not initialized. Please refresh the page.");
+                    throw new Error("Please refresh the page");
                 }
                 
-                // Request permissions
                 const permissions = await wallet.requestPermissions({
                     network: {
-                        type: "mainnet" // or "ghostnet" for testnet
-                        // type: "ghostnet" // Uncomment for testnet
+                        type: "mainnet"
                     }
                 });
                 
                 userAddress = permissions.address;
-                console.log("Connected wallet:", userAddress);
-                
-                // Set wallet provider for Taquito
                 Tezos.setWalletProvider(wallet);
                 
                 updateWalletUI(true);
@@ -519,9 +769,9 @@
             } catch (error) {
                 console.error("Error connecting wallet:", error);
                 if (error.message.includes("Aborted")) {
-                    updateStatus("Connection cancelled by user", "error");
+                    updateStatus("Connection cancelled", "error");
                 } else {
-                    updateStatus("Failed to connect wallet: " + error.message, "error");
+                    updateStatus("Failed to connect: " + error.message, "error");
                 }
             }
         }
@@ -533,7 +783,7 @@
             }
             
             if (CONTRACT_ADDRESS === "KT1...") {
-                updateStatus("Contract not deployed yet. Please update CONTRACT_ADDRESS in the code.", "error");
+                updateStatus("Contract not deployed yet", "error");
                 return;
             }
             
@@ -541,11 +791,9 @@
                 updateStatus("Preparing transaction...", "status");
                 document.getElementById('mint-btn').disabled = true;
                 
-                console.log("Getting contract at:", CONTRACT_ADDRESS);
                 const contract = await Tezos.wallet.at(CONTRACT_ADDRESS);
                 
                 updateStatus("Please confirm in your wallet...", "status");
-                console.log("Sending mint transaction...");
                 
                 const operation = await contract.methods.mint().send({
                     amount: 5,
@@ -553,17 +801,13 @@
                 });
                 
                 updateStatus("Transaction submitted! Waiting for confirmation...", "status");
-                console.log("Operation hash:", operation.opHash);
                 
                 await operation.confirmation();
                 
                 updateStatus("Mint successful! 🎉", "success");
-                console.log("Mint confirmed!");
                 
-                // Reload stats
                 await loadContractStats();
                 
-                // Re-enable button after delay
                 setTimeout(() => {
                     document.getElementById('mint-btn').disabled = false;
                 }, 3000);
@@ -577,22 +821,14 @@
         
         async function loadContractStats() {
             try {
-                if (CONTRACT_ADDRESS === "KT1...") {
-                    console.log("Using placeholder contract address - stats unavailable");
-                    return;
-                }
+                if (CONTRACT_ADDRESS === "KT1...") return;
                 
-                console.log("Loading contract stats from:", CONTRACT_ADDRESS);
                 const contract = await Tezos.contract.at(CONTRACT_ADDRESS);
                 const storage = await contract.storage();
                 
-                const mintedCount = storage.next_token_id.toString();
-                document.getElementById('minted-count').textContent = mintedCount;
-                console.log("Minted count:", mintedCount);
+                document.getElementById('minted-count').textContent = storage.next_token_id.toString();
                 
             } catch (error) {
-                console.error("Error loading contract stats:", error);
-                // Don't show error to user - might just be testnet vs mainnet mismatch
                 document.getElementById('minted-count').textContent = "?";
             }
         }
@@ -625,16 +861,8 @@
             statusEl.className = `status ${type}`;
         }
         
-        function generateNewPreview() {
-            // Regenerate with new hash
-            if (window.regenerateArt) {
-                window.regenerateArt();
-            }
-        }
-        
         // Initialize on load
         window.addEventListener('load', init);
     </script>
-    <script src="vaporwave_nature.js"></script>
 </body>
 </html>
