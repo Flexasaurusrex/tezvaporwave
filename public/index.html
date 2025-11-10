@@ -6,7 +6,7 @@
     <title>Vaporwave Nature - Tezos NFT Mint</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
     <script src="https://unpkg.com/@taquito/taquito@19.0.0/dist/taquito.min.js"></script>
-    <script src="https://unpkg.com/@taquito/beacon-wallet@19.0.0/dist/taquito-beacon-wallet.umd.js"></script>
+    <script src="https://unpkg.com/@airgap/beacon-sdk@4.2.2/dist/walletbeacon.min.js"></script>
     
     <!-- Load deterministic art engine -->
     <script src="/js/vaporwave-deterministic.js"></script>
@@ -411,17 +411,15 @@
     </div>
     
     <script>
-        // Configuration
         const CONTRACT_ADDRESS = "KT1BAhYiveR7meFqzbZj7jUya5CoYXwoYoVz";
         const RPC_URL = "https://mainnet.api.tez.ie";
         
         let Tezos;
-        let wallet;
+        let dAppClient;
         let userAddress;
         let currentTokenId = 0;
         let p5Instance;
         
-        // Initialize
         async function init() {
             console.log("=== Initializing ===");
             
@@ -429,78 +427,43 @@
             await new Promise(resolve => setTimeout(resolve, 500));
             
             try {
-                if (typeof taquito === 'undefined' || typeof taquitoBeaconWallet === 'undefined') {
-                    updateStatus("Libraries loading...", "status");
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-                
-                console.log("Creating Taquito instance...");
                 Tezos = new taquito.TezosToolkit(RPC_URL);
-                console.log("✓ Taquito created");
+                dAppClient = new beacon.DAppClient({ name: "Vaporwave Nature" });
                 
-                console.log("Creating Beacon Wallet...");
-                wallet = new taquitoBeaconWallet.BeaconWallet({
-                    name: "Vaporwave Nature",
-                    preferredNetwork: "mainnet"
-                });
-                console.log("✓ Wallet created");
-                
-                Tezos.setWalletProvider(wallet);
-                
-                const activeAccount = await wallet.client.getActiveAccount();
-                
+                const activeAccount = await dAppClient.getActiveAccount();
                 if (activeAccount) {
                     userAddress = activeAccount.address;
-                    console.log("✓ Found existing connection:", userAddress);
                     updateWalletUI(true);
                 } else {
                     updateStatus("Connect your wallet to mint", "status");
                 }
                 
                 await loadContractStats();
-                console.log("=== Initialization Complete ===");
-                
+                console.log("=== Init Complete ===");
             } catch (error) {
-                console.error("Initialization error:", error);
+                console.error("Init error:", error);
                 updateStatus("Ready! Connect wallet to begin.", "status");
             }
         }
         
         async function connectWallet() {
             try {
-                console.log("=== Connect Wallet Clicked ===");
                 updateStatus("Connecting...", "status");
                 
-                if (!wallet) {
-                    wallet = new taquitoBeaconWallet.BeaconWallet({
-                        name: "Vaporwave Nature",
-                        preferredNetwork: "mainnet"
-                    });
-                    Tezos.setWalletProvider(wallet);
+                if (!dAppClient) {
+                    dAppClient = new beacon.DAppClient({ name: "Vaporwave Nature" });
                 }
                 
-                updateStatus("Opening wallet...", "status");
+                await dAppClient.requestPermissions({ network: { type: "mainnet" } });
                 
-                await wallet.requestPermissions({
-                    network: {
-                        type: "mainnet"
-                    }
-                });
-                
-                userAddress = await wallet.getPKH();
-                console.log("✓ Connected:", userAddress);
+                const activeAccount = await dAppClient.getActiveAccount();
+                userAddress = activeAccount.address;
                 
                 updateWalletUI(true);
                 updateStatus("✓ Wallet connected!", "success");
-                
             } catch (error) {
                 console.error("Connection error:", error);
-                
-                if (error.name === "AbortedBeaconError" || error.message?.includes("Aborted")) {
-                    updateStatus("Connection cancelled", "error");
-                } else {
-                    updateStatus("Connection failed: " + error.message, "error");
-                }
+                updateStatus(error.message?.includes("Abort") ? "Connection cancelled" : "Connection failed: " + error.message, "error");
             }
         }
         
@@ -514,27 +477,27 @@
                 updateStatus("Preparing transaction...", "status");
                 document.getElementById('mint-btn').disabled = true;
                 
-                console.log("Getting contract at:", CONTRACT_ADDRESS);
-                const contract = await Tezos.wallet.at(CONTRACT_ADDRESS);
-                console.log("✓ Contract loaded");
+                const contract = await Tezos.contract.at(CONTRACT_ADDRESS);
+                const mintOp = contract.methods.mint();
+                const mintParams = mintOp.toTransferParams({ amount: 5, mutez: false });
                 
                 updateStatus("Please confirm in your wallet...", "status");
-                console.log("Calling mint()...");
                 
-                const operation = await contract.methods.mint().send({
-                    amount: 5,
-                    mutez: false
+                const { transactionHash } = await dAppClient.requestOperation({
+                    operationDetails: [{
+                        kind: "transaction",
+                        destination: CONTRACT_ADDRESS,
+                        amount: "5000000",
+                        parameters: mintParams.parameter
+                    }]
                 });
                 
-                console.log("✓ Operation sent:", operation.opHash);
-                updateStatus(`Transaction submitted! Hash: ${operation.opHash.substring(0, 10)}...`, "status");
-                
+                console.log("✓ Op hash:", transactionHash);
                 updateStatus("Waiting for confirmation...", "status");
-                const confirmation = await operation.confirmation();
-                console.log("✓ Confirmed:", confirmation);
                 
-                updateStatus(`🎉 Mint successful! You minted Token #${currentTokenId}!`, "success");
+                await new Promise(resolve => setTimeout(resolve, 30000));
                 
+                updateStatus(`🎉 Mint successful! Token #${currentTokenId}!`, "success");
                 await loadContractStats();
                 
                 setTimeout(() => {
@@ -543,18 +506,7 @@
                 
             } catch (error) {
                 console.error("Mint error:", error);
-                console.error("Error details:", JSON.stringify(error, null, 2));
-                
-                let errorMsg = "Mint failed: ";
-                if (error.message) {
-                    errorMsg += error.message;
-                } else if (error.description) {
-                    errorMsg += error.description;
-                } else {
-                    errorMsg += "Unknown error. Check console.";
-                }
-                
-                updateStatus(errorMsg, "error");
+                updateStatus("Mint failed: " + (error.message || "Unknown error"), "error");
                 document.getElementById('mint-btn').disabled = false;
             }
         }
@@ -563,12 +515,9 @@
             try {
                 const contract = await Tezos.contract.at(CONTRACT_ADDRESS);
                 const storage = await contract.storage();
-                
                 currentTokenId = parseInt(storage.next_token_id.toString());
                 document.getElementById('minted-count').textContent = currentTokenId;
-                
                 updatePreviewDisplay();
-                
             } catch (error) {
                 console.error("Error loading stats:", error);
                 currentTokenId = 0;
@@ -580,14 +529,12 @@
         function updatePreviewDisplay() {
             document.getElementById('preview-token-id').textContent = currentTokenId;
             document.getElementById('mint-token-id').textContent = currentTokenId;
-            
             if (window.generateFromTokenId) {
                 window.generateFromTokenId(currentTokenId);
             }
         }
         
         function refreshPreview() {
-            console.log("Refreshing preview for token", currentTokenId);
             updatePreviewDisplay();
         }
         
