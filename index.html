@@ -406,7 +406,6 @@
         </footer>
     </div>
     
-    <script src="vaporwave_nature.js"></script>
     <script>
         // Configuration
         const CONTRACT_ADDRESS = "KT1..."; // Replace with your deployed contract address
@@ -416,46 +415,79 @@
         let Tezos;
         let wallet;
         let userAddress;
+        let p5Instance;
         
         // Initialize
         async function init() {
-            // Setup p5.js canvas in container
-            const container = document.getElementById('canvas-container');
-            new p5((sketch) => {
-                sketch.setup = setup;
-                sketch.draw = draw;
-                sketch.mousePressed = mousePressed;
-            }, container);
-            
-            // Initialize Taquito
-            Tezos = new tezos.TezosToolkit(RPC_URL);
-            wallet = new beacon.DAppClient({ name: "Vaporwave Nature" });
-            
-            // Check for existing connection
-            const activeAccount = await wallet.getActiveAccount();
-            if (activeAccount) {
-                userAddress = activeAccount.address;
-                updateWalletUI(true);
+            try {
+                // Check if dependencies loaded
+                if (typeof tezos === 'undefined') {
+                    console.error("Taquito not loaded");
+                    updateStatus("Error: Taquito library not loaded", "error");
+                    return;
+                }
+                
+                if (typeof window.beacon === 'undefined') {
+                    console.error("Beacon SDK not loaded");
+                    updateStatus("Error: Beacon SDK not loaded", "error");
+                    return;
+                }
+                
+                console.log("Initializing Tezos integration...");
+                
+                // Initialize Taquito
+                Tezos = new tezos.TezosToolkit(RPC_URL);
+                console.log("Taquito initialized");
+                
+                // Initialize Beacon SDK - using the correct CDN reference
+                const { DAppClient } = window.beacon;
+                wallet = new DAppClient({ name: "Vaporwave Nature" });
+                console.log("Beacon wallet initialized");
+                
+                // Check for existing connection
+                const activeAccount = await wallet.getActiveAccount();
+                if (activeAccount) {
+                    userAddress = activeAccount.address;
+                    console.log("Found existing connection:", userAddress);
+                    Tezos.setWalletProvider(wallet);
+                    updateWalletUI(true);
+                }
+                
+                // Load contract stats (only if contract deployed)
+                if (CONTRACT_ADDRESS !== "KT1...") {
+                    await loadContractStats();
+                } else {
+                    console.log("Contract not deployed yet - using placeholder address");
+                }
+                
+                console.log("Initialization complete");
+                
+            } catch (error) {
+                console.error("Error during initialization:", error);
+                updateStatus("Initialization error: " + error.message, "error");
             }
-            
-            // Load contract stats
-            await loadContractStats();
         }
         
         async function connectWallet() {
             try {
                 updateStatus("Connecting wallet...", "status");
                 
+                if (!wallet) {
+                    throw new Error("Beacon SDK not initialized. Please refresh the page.");
+                }
+                
                 // Request permissions
                 const permissions = await wallet.requestPermissions({
                     network: {
                         type: "mainnet" // or "ghostnet" for testnet
+                        // type: "ghostnet" // Uncomment for testnet
                     }
                 });
                 
                 userAddress = permissions.address;
+                console.log("Connected wallet:", userAddress);
                 
-                // Set wallet provider
+                // Set wallet provider for Taquito
                 Tezos.setWalletProvider(wallet);
                 
                 updateWalletUI(true);
@@ -463,7 +495,11 @@
                 
             } catch (error) {
                 console.error("Error connecting wallet:", error);
-                updateStatus("Failed to connect wallet: " + error.message, "error");
+                if (error.message.includes("Aborted")) {
+                    updateStatus("Connection cancelled by user", "error");
+                } else {
+                    updateStatus("Failed to connect wallet: " + error.message, "error");
+                }
             }
         }
         
@@ -473,13 +509,20 @@
                 return;
             }
             
+            if (CONTRACT_ADDRESS === "KT1...") {
+                updateStatus("Contract not deployed yet. Please update CONTRACT_ADDRESS in the code.", "error");
+                return;
+            }
+            
             try {
                 updateStatus("Preparing transaction...", "status");
                 document.getElementById('mint-btn').disabled = true;
                 
+                console.log("Getting contract at:", CONTRACT_ADDRESS);
                 const contract = await Tezos.wallet.at(CONTRACT_ADDRESS);
                 
                 updateStatus("Please confirm in your wallet...", "status");
+                console.log("Sending mint transaction...");
                 
                 const operation = await contract.methods.mint().send({
                     amount: 5,
@@ -487,10 +530,12 @@
                 });
                 
                 updateStatus("Transaction submitted! Waiting for confirmation...", "status");
+                console.log("Operation hash:", operation.opHash);
                 
                 await operation.confirmation();
                 
                 updateStatus("Mint successful! 🎉", "success");
+                console.log("Mint confirmed!");
                 
                 // Reload stats
                 await loadContractStats();
@@ -509,13 +554,23 @@
         
         async function loadContractStats() {
             try {
+                if (CONTRACT_ADDRESS === "KT1...") {
+                    console.log("Using placeholder contract address - stats unavailable");
+                    return;
+                }
+                
+                console.log("Loading contract stats from:", CONTRACT_ADDRESS);
                 const contract = await Tezos.contract.at(CONTRACT_ADDRESS);
                 const storage = await contract.storage();
                 
-                document.getElementById('minted-count').textContent = storage.next_token_id.toString();
+                const mintedCount = storage.next_token_id.toString();
+                document.getElementById('minted-count').textContent = mintedCount;
+                console.log("Minted count:", mintedCount);
                 
             } catch (error) {
                 console.error("Error loading contract stats:", error);
+                // Don't show error to user - might just be testnet vs mainnet mismatch
+                document.getElementById('minted-count').textContent = "?";
             }
         }
         
@@ -548,11 +603,15 @@
         }
         
         function generateNewPreview() {
-            mousePressed(); // Triggers regeneration in p5.js
+            // Regenerate with new hash
+            if (window.regenerateArt) {
+                window.regenerateArt();
+            }
         }
         
         // Initialize on load
         window.addEventListener('load', init);
     </script>
+    <script src="vaporwave_nature.js"></script>
 </body>
 </html>
