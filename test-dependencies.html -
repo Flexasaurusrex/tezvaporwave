@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dependencies Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #0f0;
+        }
+        .test {
+            margin: 10px 0;
+            padding: 10px;
+            background: #2a2a2a;
+            border-left: 4px solid #444;
+        }
+        .pass { border-left-color: #0f0; }
+        .fail { border-left-color: #f00; color: #f00; }
+        .loading { border-left-color: #ff0; color: #ff0; }
+    </style>
+</head>
+<body>
+    <h1>Dependency Loading Test</h1>
+    <div id="tests"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@taquito/taquito@17.3.2/dist/taquito.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@airgap/beacon-sdk@4.0.6/dist/walletbeacon.min.js"></script>
+    
+    <script>
+        const testsDiv = document.getElementById('tests');
+        
+        function addTest(name, status, message) {
+            const div = document.createElement('div');
+            div.className = `test ${status}`;
+            div.innerHTML = `<strong>${name}:</strong> ${message}`;
+            testsDiv.appendChild(div);
+        }
+        
+        addTest("Page Loaded", "pass", "HTML page loaded successfully");
+        
+        // Check each dependency
+        setTimeout(() => {
+            // p5.js
+            if (typeof p5 !== 'undefined') {
+                addTest("p5.js", "pass", `Loaded - version available`);
+            } else {
+                addTest("p5.js", "fail", "NOT LOADED");
+            }
+            
+            // Taquito
+            if (typeof tezos !== 'undefined') {
+                addTest("Taquito", "pass", "Loaded - tezos object available");
+                console.log("Taquito object:", tezos);
+            } else {
+                addTest("Taquito", "fail", "NOT LOADED - Check console for errors");
+            }
+            
+            // Beacon
+            if (typeof window.beacon !== 'undefined') {
+                addTest("Beacon SDK", "pass", "Loaded - window.beacon available");
+                console.log("Beacon object:", window.beacon);
+            } else {
+                addTest("Beacon SDK", "fail", "NOT LOADED - Check console for errors");
+            }
+            
+            // Test Taquito initialization
+            if (typeof tezos !== 'undefined') {
+                try {
+                    const Tezos = new tezos.TezosToolkit("https://mainnet.api.tez.ie");
+                    addTest("Taquito Init", "pass", "Successfully created TezosToolkit instance");
+                } catch (e) {
+                    addTest("Taquito Init", "fail", `Error: ${e.message}`);
+                }
+            }
+            
+            // Test Beacon initialization
+            if (typeof window.beacon !== 'undefined') {
+                try {
+                    const { DAppClient } = window.beacon;
+                    const wallet = new DAppClient({ name: "Test" });
+                    addTest("Beacon Init", "pass", "Successfully created DAppClient instance");
+                } catch (e) {
+                    addTest("Beacon Init", "fail", `Error: ${e.message}`);
+                }
+            }
+            
+            console.log("All tests complete!");
+        }, 2000);
+    </script>
+</body>
+</html>
