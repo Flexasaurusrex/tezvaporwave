@@ -1191,24 +1191,6 @@
                 }
             }
         }
-                
-            } catch (error) {
-                console.error("=== Connection Failed ===");
-                console.error("Error type:", error.name);
-                console.error("Error message:", error.message);
-                console.error("Full error:", error);
-                
-                if (error.name === "AbortedBeaconError" || error.message.includes("Aborted")) {
-                    updateStatus("Connection cancelled by user", "error");
-                } else if (error.message.includes("No transport")) {
-                    updateStatus("No Tezos wallet found. Please install Temple, Kukai, or Umami wallet.", "error");
-                } else if (error.message.includes("BeaconWallet not loaded")) {
-                    updateStatus("Wallet libraries not loaded. Please refresh the page and try again.", "error");
-                } else {
-                    updateStatus("Connection failed: " + error.message, "error");
-                }
-            }
-        }
         
         async function mint() {
             if (!userAddress) {
