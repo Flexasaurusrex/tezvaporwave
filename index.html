@@ -1000,17 +1000,32 @@
                 
                 console.log('Starting dependency check...');
                 console.log('- Taquito available:', typeof taquito !== 'undefined');
-                console.log('- BeaconWallet available:', typeof taquitoBeaconWallet !== 'undefined');
+                console.log('- BeaconWallet (taquitoBeaconWallet):', typeof taquitoBeaconWallet !== 'undefined');
+                console.log('- BeaconWallet (window.BeaconWallet):', typeof window.BeaconWallet !== 'undefined');
+                
+                // Debug: Log what's actually in taquitoBeaconWallet
+                if (typeof taquitoBeaconWallet !== 'undefined') {
+                    console.log('- taquitoBeaconWallet keys:', Object.keys(taquitoBeaconWallet));
+                }
                 
                 const checkInterval = setInterval(() => {
                     attempts++;
                     
                     const taquitoLoaded = typeof taquito !== 'undefined';
-                    const beaconWalletLoaded = typeof taquitoBeaconWallet !== 'undefined';
+                    const beaconWalletLoaded = typeof taquitoBeaconWallet !== 'undefined' || typeof window.BeaconWallet !== 'undefined';
                     
                     if (taquitoLoaded && beaconWalletLoaded) {
                         clearInterval(checkInterval);
                         console.log('✓ All dependencies loaded!');
+                        
+                        // Debug what's available
+                        if (typeof taquitoBeaconWallet !== 'undefined') {
+                            console.log('Available in taquitoBeaconWallet:', Object.keys(taquitoBeaconWallet));
+                        }
+                        if (typeof window.BeaconWallet !== 'undefined') {
+                            console.log('window.BeaconWallet is available');
+                        }
+                        
                         resolve();
                     } else if (attempts >= maxAttempts) {
                         clearInterval(checkInterval);
@@ -1047,7 +1062,29 @@
                 console.log("✓ Taquito created");
                 
                 console.log("Creating BeaconWallet...");
-                wallet = new taquitoBeaconWallet.BeaconWallet({ 
+                
+                // Try to find BeaconWallet - could be in different places
+                let BeaconWalletClass;
+                if (typeof window.BeaconWallet !== 'undefined') {
+                    BeaconWalletClass = window.BeaconWallet;
+                    console.log("Found BeaconWallet at window.BeaconWallet");
+                } else if (taquitoBeaconWallet && taquitoBeaconWallet.BeaconWallet) {
+                    BeaconWalletClass = taquitoBeaconWallet.BeaconWallet;
+                    console.log("Found BeaconWallet at taquitoBeaconWallet.BeaconWallet");
+                } else if (typeof taquitoBeaconWallet === 'function') {
+                    BeaconWalletClass = taquitoBeaconWallet;
+                    console.log("taquitoBeaconWallet is itself the constructor");
+                } else {
+                    console.error("Cannot find BeaconWallet constructor!");
+                    console.log("Available:", {
+                        windowBeaconWallet: typeof window.BeaconWallet,
+                        taquitoBeaconWallet: typeof taquitoBeaconWallet,
+                        keys: taquitoBeaconWallet ? Object.keys(taquitoBeaconWallet) : 'undefined'
+                    });
+                    throw new Error("BeaconWallet constructor not found");
+                }
+                
+                wallet = new BeaconWalletClass({ 
                     name: "Vaporwave Nature",
                     iconUrl: "https://tezvaporwave.vercel.app/favicon.ico",
                     appUrl: "https://tezvaporwave.vercel.app"
@@ -1096,12 +1133,23 @@
                     updateStatus("Setting up wallet connection...", "status");
                     
                     // Check if libraries are now available
-                    if (typeof taquitoBeaconWallet === 'undefined') {
+                    if (typeof taquitoBeaconWallet === 'undefined' && typeof window.BeaconWallet === 'undefined') {
                         throw new Error("BeaconWallet not loaded. Please refresh the page and try again.");
                     }
                     
-                    // Try to create wallet now
-                    wallet = new taquitoBeaconWallet.BeaconWallet({ 
+                    // Try to create wallet now - find the right constructor
+                    let BeaconWalletClass;
+                    if (typeof window.BeaconWallet !== 'undefined') {
+                        BeaconWalletClass = window.BeaconWallet;
+                    } else if (taquitoBeaconWallet && taquitoBeaconWallet.BeaconWallet) {
+                        BeaconWalletClass = taquitoBeaconWallet.BeaconWallet;
+                    } else if (typeof taquitoBeaconWallet === 'function') {
+                        BeaconWalletClass = taquitoBeaconWallet;
+                    } else {
+                        throw new Error("BeaconWallet constructor not found");
+                    }
+                    
+                    wallet = new BeaconWalletClass({ 
                         name: "Vaporwave Nature",
                         iconUrl: "https://tezvaporwave.vercel.app/favicon.ico",
                         appUrl: "https://tezvaporwave.vercel.app"
