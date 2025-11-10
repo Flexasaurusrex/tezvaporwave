@@ -6,11 +6,9 @@
     <title>Vaporwave Nature - Tezos NFT Mint</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
     <!-- Taquito Core -->
-    <script src="https://unpkg.com/@taquito/taquito@17.3.2/dist/taquito.min.js"></script>
-    <!-- Beacon SDK -->
-    <script src="https://unpkg.com/@airgap/beacon-sdk@4.0.6/dist/walletbeacon.min.js"></script>
-    <!-- Taquito BeaconWallet Adapter (THIS WAS MISSING!) -->
-    <script src="https://unpkg.com/@taquito/beacon-wallet@17.3.2/dist/taquito-beacon-wallet.umd.js"></script>
+    <script src="https://unpkg.com/@taquito/taquito@19.0.0/dist/taquito.min.js"></script>
+    <!-- Beacon SDK (DAppClient) -->
+    <script src="https://unpkg.com/@airgap/beacon-dapp@4.2.2/dist/walletbeacon.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
         
@@ -989,50 +987,63 @@
         // const RPC_URL = "https://ghostnet.ecadinfra.com"; // Testnet
         
         let Tezos;
-        let wallet;
+        let dAppClient;
         let userAddress;
         
-        // Wait for dependencies with better logging
+        // Simple wallet provider that wraps DAppClient
+        class SimpleWalletProvider {
+            constructor(client) {
+                this.client = client;
+            }
+            
+            async getPKH() {
+                const account = await this.client.getActiveAccount();
+                if (!account) throw new Error('No active account');
+                return account.address;
+            }
+            
+            async mapTransferParamsToWalletParams(params) {
+                return params;
+            }
+            
+            async sendOperations(params) {
+                const account = await this.client.getActiveAccount();
+                if (!account) throw new Error('No active account');
+                
+                const { transactionHash } = await this.client.requestOperation({
+                    operationDetails: params
+                });
+                
+                return transactionHash;
+            }
+        }
+        
+        // Wait for dependencies
         function waitForDependencies() {
             return new Promise((resolve, reject) => {
                 let attempts = 0;
-                const maxAttempts = 30; // 3 seconds
+                const maxAttempts = 30;
                 
                 console.log('Starting dependency check...');
                 console.log('- Taquito available:', typeof taquito !== 'undefined');
-                console.log('- BeaconWallet (taquitoBeaconWallet):', typeof taquitoBeaconWallet !== 'undefined');
-                console.log('- BeaconWallet (window.BeaconWallet):', typeof window.BeaconWallet !== 'undefined');
-                
-                // Debug: Log what's actually in taquitoBeaconWallet
-                if (typeof taquitoBeaconWallet !== 'undefined') {
-                    console.log('- taquitoBeaconWallet keys:', Object.keys(taquitoBeaconWallet));
-                }
+                console.log('- Beacon DAppClient available:', typeof beacon !== 'undefined');
                 
                 const checkInterval = setInterval(() => {
                     attempts++;
                     
                     const taquitoLoaded = typeof taquito !== 'undefined';
-                    const beaconWalletLoaded = typeof taquitoBeaconWallet !== 'undefined' || typeof window.BeaconWallet !== 'undefined';
+                    const beaconLoaded = typeof beacon !== 'undefined';
                     
-                    if (taquitoLoaded && beaconWalletLoaded) {
+                    if (taquitoLoaded && beaconLoaded) {
                         clearInterval(checkInterval);
                         console.log('✓ All dependencies loaded!');
-                        
-                        // Debug what's available
-                        if (typeof taquitoBeaconWallet !== 'undefined') {
-                            console.log('Available in taquitoBeaconWallet:', Object.keys(taquitoBeaconWallet));
-                        }
-                        if (typeof window.BeaconWallet !== 'undefined') {
-                            console.log('window.BeaconWallet is available');
-                        }
-                        
                         resolve();
                     } else if (attempts >= maxAttempts) {
                         clearInterval(checkInterval);
                         console.error('✗ Timeout after 3 seconds');
                         console.error('- Taquito:', taquitoLoaded ? '✓' : '✗');
-                        console.error('- BeaconWallet:', beaconWalletLoaded ? '✓' : '✗');
-                        reject(new Error("Tezos libraries failed to load. You can still try to connect."));
+                        console.error('- Beacon:', beaconLoaded ? '✓' : '✗');
+                        reject(new Error("Tezos libraries failed to load"));
                     }
                     
                     if (attempts % 10 === 0) {
@@ -1047,12 +1058,12 @@
             try {
                 console.log("=== Initializing Tezos Integration ===");
                 
-                // Always enable the button after a short delay, even if libraries don't load
+                // Always enable the button after a short delay
                 setTimeout(() => {
                     const connectBtn = document.getElementById('connect-btn');
                     connectBtn.disabled = false;
                     connectBtn.textContent = "Connect Wallet";
-                    console.log("Connect button enabled - you can try to connect");
+                    console.log("Connect button enabled");
                 }, 2000);
                 
                 await waitForDependencies();
@@ -1061,46 +1072,24 @@
                 Tezos = new taquito.TezosToolkit(RPC_URL);
                 console.log("✓ Taquito created");
                 
-                console.log("Creating BeaconWallet...");
-                
-                // Try to find BeaconWallet - could be in different places
-                let BeaconWalletClass;
-                if (typeof window.BeaconWallet !== 'undefined') {
-                    BeaconWalletClass = window.BeaconWallet;
-                    console.log("Found BeaconWallet at window.BeaconWallet");
-                } else if (taquitoBeaconWallet && taquitoBeaconWallet.BeaconWallet) {
-                    BeaconWalletClass = taquitoBeaconWallet.BeaconWallet;
-                    console.log("Found BeaconWallet at taquitoBeaconWallet.BeaconWallet");
-                } else if (typeof taquitoBeaconWallet === 'function') {
-                    BeaconWalletClass = taquitoBeaconWallet;
-                    console.log("taquitoBeaconWallet is itself the constructor");
-                } else {
-                    console.error("Cannot find BeaconWallet constructor!");
-                    console.log("Available:", {
-                        windowBeaconWallet: typeof window.BeaconWallet,
-                        taquitoBeaconWallet: typeof taquitoBeaconWallet,
-                        keys: taquitoBeaconWallet ? Object.keys(taquitoBeaconWallet) : 'undefined'
-                    });
-                    throw new Error("BeaconWallet constructor not found");
-                }
-                
-                wallet = new BeaconWalletClass({ 
-                    name: "Vaporwave Nature",
-                    iconUrl: "https://tezvaporwave.vercel.app/favicon.ico",
-                    appUrl: "https://tezvaporwave.vercel.app"
+                console.log("Creating Beacon DAppClient...");
+                dAppClient = new beacon.DAppClient({ 
+                    name: "Vaporwave Nature"
                 });
-                console.log("✓ BeaconWallet created");
-                
-                // Set wallet provider
-                Tezos.setWalletProvider(wallet);
+                console.log("✓ DAppClient created");
                 
                 // Check for existing connection
                 console.log("Checking for existing wallet connection...");
-                const activeAccount = await wallet.client.getActiveAccount();
+                const activeAccount = await dAppClient.getActiveAccount();
                 
                 if (activeAccount) {
                     userAddress = activeAccount.address;
                     console.log("✓ Found existing connection:", userAddress);
+                    
+                    // Set up wallet provider
+                    const walletProvider = new SimpleWalletProvider(dAppClient);
+                    Tezos.setWalletProvider(walletProvider);
+                    
                     updateWalletUI(true);
                 } else {
                     console.log("No existing connection found");
@@ -1113,13 +1102,13 @@
                 console.error("=== Initialization Failed ===");
                 console.error("Error:", error);
                 
-                // Still enable the button so user can try
+                // Still enable the button
                 const connectBtn = document.getElementById('connect-btn');
                 connectBtn.disabled = false;
                 connectBtn.textContent = "Connect Wallet (Try Anyway)";
                 
-                updateStatus("Libraries may not have loaded. You can still try to connect your wallet.", "error");
-                console.log("You can still click Connect Wallet to try - it might work!");
+                updateStatus("Libraries may not have loaded. You can still try to connect.", "error");
+                console.log("You can still click Connect Wallet to try!");
             }
         }
         
@@ -1127,65 +1116,68 @@
             try {
                 console.log("=== Connect Wallet Clicked ===");
                 
-                // Try to initialize wallet if it wasn't ready before
-                if (!wallet) {
-                    console.log("Wallet not initialized, attempting now...");
+                // Try to initialize if not ready
+                if (!dAppClient) {
+                    console.log("DAppClient not initialized, attempting now...");
                     updateStatus("Setting up wallet connection...", "status");
                     
-                    // Check if libraries are now available
-                    if (typeof taquitoBeaconWallet === 'undefined' && typeof window.BeaconWallet === 'undefined') {
-                        throw new Error("BeaconWallet not loaded. Please refresh the page and try again.");
+                    if (typeof beacon === 'undefined') {
+                        throw new Error("Beacon SDK not loaded. Please refresh the page.");
                     }
                     
-                    // Try to create wallet now - find the right constructor
-                    let BeaconWalletClass;
-                    if (typeof window.BeaconWallet !== 'undefined') {
-                        BeaconWalletClass = window.BeaconWallet;
-                    } else if (taquitoBeaconWallet && taquitoBeaconWallet.BeaconWallet) {
-                        BeaconWalletClass = taquitoBeaconWallet.BeaconWallet;
-                    } else if (typeof taquitoBeaconWallet === 'function') {
-                        BeaconWalletClass = taquitoBeaconWallet;
-                    } else {
-                        throw new Error("BeaconWallet constructor not found");
-                    }
-                    
-                    wallet = new BeaconWalletClass({ 
-                        name: "Vaporwave Nature",
-                        iconUrl: "https://tezvaporwave.vercel.app/favicon.ico",
-                        appUrl: "https://tezvaporwave.vercel.app"
+                    dAppClient = new beacon.DAppClient({ 
+                        name: "Vaporwave Nature"
                     });
-                    console.log("✓ Wallet created successfully");
+                    console.log("✓ DAppClient created");
                 }
                 
-                // Try to initialize Taquito if not ready
+                // Initialize Taquito if not ready
                 if (!Tezos && typeof taquito !== 'undefined') {
                     Tezos = new taquito.TezosToolkit(RPC_URL);
-                    Tezos.setWalletProvider(wallet);
                     console.log("✓ Taquito initialized");
                 }
                 
                 updateStatus("Opening wallet connection dialog...", "status");
                 console.log("Requesting permissions...");
                 
-                // Request permissions using BeaconWallet
-                await wallet.requestPermissions({
+                // Request permissions
+                const permissions = await dAppClient.requestPermissions({
                     network: {
-                        type: "mainnet" // Change to "ghostnet" for testnet
+                        type: "mainnet" // or "ghostnet" for testnet
                     }
                 });
                 
                 console.log("✓ Permissions granted");
+                console.log("Connected address:", permissions.address);
                 
-                // Get the connected account
-                const activeAccount = await wallet.client.getActiveAccount();
-                userAddress = activeAccount.address;
+                userAddress = permissions.address;
                 
-                console.log("Connected address:", userAddress);
+                // Set up wallet provider
+                const walletProvider = new SimpleWalletProvider(dAppClient);
+                Tezos.setWalletProvider(walletProvider);
                 
                 updateWalletUI(true);
                 updateStatus("Wallet connected successfully! 🎉", "success");
                 
                 console.log("=== Connection Successful ===");
+                
+            } catch (error) {
+                console.error("=== Connection Failed ===");
+                console.error("Error type:", error.name);
+                console.error("Error message:", error.message);
+                console.error("Full error:", error);
+                
+                if (error.name === "AbortedBeaconError" || error.message.includes("Aborted")) {
+                    updateStatus("Connection cancelled by user", "error");
+                } else if (error.message.includes("No transport")) {
+                    updateStatus("No Tezos wallet found. Please install Temple, Kukai, or Umami wallet.", "error");
+                } else if (error.message.includes("Beacon SDK not loaded")) {
+                    updateStatus("Wallet libraries not loaded. Please refresh the page.", "error");
+                } else {
+                    updateStatus("Connection failed: " + error.message, "error");
+                }
+            }
+        }
                 
             } catch (error) {
                 console.error("=== Connection Failed ===");
