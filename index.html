@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vaporwave Nature - Tezos NFT Mint</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
-    <script src="https://unpkg.com/@airgap/beacon-sdk@latest/dist/walletbeacon.min.js"></script>
-    <script src="https://unpkg.com/@taquito/taquito@latest/dist/taquito.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@taquito/taquito@17.3.2/dist/taquito.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@airgap/beacon-sdk@4.0.6/dist/walletbeacon.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
         
@@ -417,40 +417,63 @@
         let userAddress;
         let p5Instance;
         
+        // Wait for all dependencies to load
+        function waitForDependencies() {
+            return new Promise((resolve, reject) => {
+                let attempts = 0;
+                const maxAttempts = 100; // 10 seconds
+                
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    
+                    if (typeof tezos !== 'undefined' && 
+                        typeof window.beacon !== 'undefined' && 
+                        typeof p5 !== 'undefined') {
+                        clearInterval(checkInterval);
+                        console.log("All dependencies loaded!");
+                        resolve();
+                    } else if (attempts >= maxAttempts) {
+                        clearInterval(checkInterval);
+                        console.error("Timeout waiting for dependencies");
+                        console.error("Taquito loaded:", typeof tezos !== 'undefined');
+                        console.error("Beacon loaded:", typeof window.beacon !== 'undefined');
+                        console.error("p5 loaded:", typeof p5 !== 'undefined');
+                        reject(new Error("Dependencies failed to load"));
+                    }
+                }, 100);
+            });
+        }
+        
         // Initialize
         async function init() {
             try {
-                // Check if dependencies loaded
-                if (typeof tezos === 'undefined') {
-                    console.error("Taquito not loaded");
-                    updateStatus("Error: Taquito library not loaded", "error");
-                    return;
-                }
+                console.log("Waiting for dependencies to load...");
                 
-                if (typeof window.beacon === 'undefined') {
-                    console.error("Beacon SDK not loaded");
-                    updateStatus("Error: Beacon SDK not loaded", "error");
-                    return;
-                }
+                await waitForDependencies();
                 
-                console.log("Initializing Tezos integration...");
+                console.log("Dependencies loaded successfully");
+                console.log("- Taquito:", typeof tezos);
+                console.log("- Beacon:", typeof window.beacon);
+                console.log("- p5:", typeof p5);
                 
                 // Initialize Taquito
                 Tezos = new tezos.TezosToolkit(RPC_URL);
-                console.log("Taquito initialized");
+                console.log("✓ Taquito initialized");
                 
-                // Initialize Beacon SDK - using the correct CDN reference
+                // Initialize Beacon SDK
                 const { DAppClient } = window.beacon;
                 wallet = new DAppClient({ name: "Vaporwave Nature" });
-                console.log("Beacon wallet initialized");
+                console.log("✓ Beacon wallet initialized");
                 
                 // Check for existing connection
                 const activeAccount = await wallet.getActiveAccount();
                 if (activeAccount) {
                     userAddress = activeAccount.address;
-                    console.log("Found existing connection:", userAddress);
+                    console.log("✓ Found existing connection:", userAddress);
                     Tezos.setWalletProvider(wallet);
                     updateWalletUI(true);
+                } else {
+                    updateStatus("Wallet not connected", "status");
                 }
                 
                 // Load contract stats (only if contract deployed)
@@ -460,11 +483,11 @@
                     console.log("Contract not deployed yet - using placeholder address");
                 }
                 
-                console.log("Initialization complete");
+                console.log("✓ Initialization complete!");
                 
             } catch (error) {
                 console.error("Error during initialization:", error);
-                updateStatus("Initialization error: " + error.message, "error");
+                updateStatus("Failed to load libraries. Please refresh the page.", "error");
             }
         }
         
