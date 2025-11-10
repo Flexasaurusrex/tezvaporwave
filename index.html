@@ -353,8 +353,8 @@
                     Connected: <span id="wallet-address"></span>
                 </div>
                 
-                <button class="btn" id="connect-btn" onclick="connectWallet()">
-                    Connect Wallet
+                <button class="btn" id="connect-btn" onclick="connectWallet()" disabled>
+                    Loading Wallet...
                 </button>
                 
                 <button class="btn" id="mint-btn" onclick="mint()" disabled>
@@ -988,21 +988,36 @@
         let wallet;
         let userAddress;
         
-        // Wait for dependencies
+        // Wait for dependencies with better logging
         function waitForDependencies() {
             return new Promise((resolve, reject) => {
                 let attempts = 0;
-                const maxAttempts = 100;
+                const maxAttempts = 50; // 5 seconds
+                
+                console.log('Starting dependency check...');
+                console.log('- Taquito available:', typeof tezos !== 'undefined');
+                console.log('- Beacon available:', typeof window.beacon !== 'undefined');
                 
                 const checkInterval = setInterval(() => {
                     attempts++;
                     
-                    if (typeof tezos !== 'undefined' && typeof window.beacon !== 'undefined') {
+                    const taquitoLoaded = typeof tezos !== 'undefined';
+                    const beaconLoaded = typeof window.beacon !== 'undefined';
+                    
+                    if (taquitoLoaded && beaconLoaded) {
                         clearInterval(checkInterval);
+                        console.log('✓ All dependencies loaded!');
                         resolve();
                     } else if (attempts >= maxAttempts) {
                         clearInterval(checkInterval);
-                        reject(new Error("Tezos dependencies failed to load"));
+                        console.error('✗ Timeout after 5 seconds');
+                        console.error('- Taquito:', taquitoLoaded ? '✓' : '✗');
+                        console.error('- Beacon:', beaconLoaded ? '✗' : '✗');
+                        reject(new Error("Tezos libraries failed to load. Try refreshing the page."));
+                    }
+                    
+                    if (attempts % 10 === 0) {
+                        console.log(`Still waiting... (${attempts * 100}ms)`);
                     }
                 }, 100);
             });
@@ -1011,60 +1026,99 @@
         // Initialize
         async function init() {
             try {
-                console.log("Waiting for Tezos dependencies...");
+                console.log("=== Initializing Tezos Integration ===");
+                
                 await waitForDependencies();
                 
+                console.log("Creating Taquito instance...");
                 Tezos = new tezos.TezosToolkit(RPC_URL);
-                const { DAppClient } = window.beacon;
-                wallet = new DAppClient({ name: "Vaporwave Nature" });
+                console.log("✓ Taquito created");
                 
+                console.log("Creating Beacon wallet...");
+                const { DAppClient } = window.beacon;
+                console.log("- DAppClient available:", typeof DAppClient);
+                
+                wallet = new DAppClient({ 
+                    name: "Vaporwave Nature",
+                    iconUrl: "https://tezvaporwave.vercel.app/favicon.ico",
+                    appUrl: "https://tezvaporwave.vercel.app"
+                });
+                console.log("✓ Beacon wallet created");
+                
+                // Check for existing connection
+                console.log("Checking for existing wallet connection...");
                 const activeAccount = await wallet.getActiveAccount();
+                
                 if (activeAccount) {
                     userAddress = activeAccount.address;
+                    console.log("✓ Found existing connection:", userAddress);
                     Tezos.setWalletProvider(wallet);
                     updateWalletUI(true);
                 } else {
-                    updateStatus("Wallet not connected", "status");
+                    console.log("No existing connection found");
+                    // Enable the connect button
+                    const connectBtn = document.getElementById('connect-btn');
+                    connectBtn.disabled = false;
+                    connectBtn.textContent = "Connect Wallet";
+                    updateStatus("Ready! Connect your Tezos wallet to mint.", "status");
                 }
                 
-                if (CONTRACT_ADDRESS !== "KT1...") {
-                    await loadContractStats();
-                }
-                
-                console.log("✓ Initialization complete!");
+                console.log("=== Initialization Complete ===");
                 
             } catch (error) {
-                console.error("Error during initialization:", error);
-                updateStatus("Wallet features unavailable. Art still works!", "error");
+                console.error("=== Initialization Failed ===");
+                console.error("Error:", error);
+                updateStatus("Failed to load wallet features. Please refresh the page.", "error");
+                
+                // Still allow art generation even if wallet fails
+                console.log("Art generation still works! Wallet features unavailable.");
             }
         }
         
         async function connectWallet() {
             try {
-                updateStatus("Connecting wallet...", "status");
+                console.log("=== Connect Wallet Clicked ===");
                 
                 if (!wallet) {
-                    throw new Error("Please refresh the page");
+                    console.error("Wallet not initialized!");
+                    updateStatus("Wallet not ready. Please refresh the page and try again.", "error");
+                    return;
                 }
                 
+                updateStatus("Opening wallet connection dialog...", "status");
+                console.log("Requesting permissions...");
+                
+                // Request permissions
                 const permissions = await wallet.requestPermissions({
                     network: {
-                        type: "mainnet"
+                        type: "mainnet", // Change to "ghostnet" for testnet
+                        rpcUrl: RPC_URL
                     }
                 });
+                
+                console.log("✓ Permissions granted");
+                console.log("Connected address:", permissions.address);
                 
                 userAddress = permissions.address;
                 Tezos.setWalletProvider(wallet);
                 
                 updateWalletUI(true);
-                updateStatus("Wallet connected!", "success");
+                updateStatus("Wallet connected successfully! 🎉", "success");
+                
+                console.log("=== Connection Successful ===");
                 
             } catch (error) {
-                console.error("Error connecting wallet:", error);
-                if (error.message.includes("Aborted")) {
-                    updateStatus("Connection cancelled", "error");
+                console.error("=== Connection Failed ===");
+                console.error("Error type:", error.name);
+                console.error("Error message:", error.message);
+                console.error("Full error:", error);
+                
+                if (error.name === "AbortedBeaconError" || error.message.includes("Aborted")) {
+                    updateStatus("Connection cancelled by user", "error");
+                } else if (error.message.includes("No transport")) {
+                    updateStatus("No Tezos wallet found. Please install Temple, Kukai, or Umami.", "error");
                 } else {
-                    updateStatus("Failed to connect: " + error.message, "error");
+                    updateStatus("Connection failed: " + error.message, "error");
                 }
             }
         }
@@ -1135,6 +1189,7 @@
             if (connected) {
                 connectBtn.textContent = "✓ Connected";
                 connectBtn.disabled = true;
+                connectBtn.style.opacity = "0.7";
                 mintBtn.disabled = false;
                 walletInfo.style.display = 'block';
                 walletAddress.textContent = userAddress.substring(0, 8) + "..." + userAddress.substring(userAddress.length - 6);
@@ -1142,9 +1197,10 @@
             } else {
                 connectBtn.textContent = "Connect Wallet";
                 connectBtn.disabled = false;
+                connectBtn.style.opacity = "1";
                 mintBtn.disabled = true;
                 walletInfo.style.display = 'none';
-                updateStatus("Wallet not connected", "status");
+                updateStatus("Connect your wallet to mint", "status");
             }
         }
         
