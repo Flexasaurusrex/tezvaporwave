@@ -23,46 +23,85 @@ function generateAttributes(tokenId) {
   // Use token ID as seed for deterministic attributes
   const seed = tokenId;
   
-  // Palette
-  const paletteIndex = seed % palettes.length;
-  const palette = palettes[paletteIndex];
+  // Palette (now 22 options!)
+  const paletteNames = [
+    "Classic Vaporwave", "Neon Dreams", "Electric Paradise", "Digital Candy",
+    "Psychedelic Neon", "Acid Rainbow", "Cyber Burst", 
+    "Dark Psychedelic", "Purple Haze", "Violet Dreams",
+    "Sunset Vibes", "Golden Hour",
+    "Ocean Deep", "Deep Sea",
+    "Fire & Ice", "Volcanic Freeze",
+    "Alien World", "Toxic Garden",
+    "Purple Haze", "Amethyst Dream",
+    "Gold Rush", "Solar Flare"
+  ];
+  const paletteIndex = seed % paletteNames.length;
+  const palette = paletteNames[paletteIndex];
   
-  // Crystal count (5-12)
-  const crystalCount = 5 + (seed * 7) % 8;
+  // Background style
+  const bgStyles = ["Dark Gradient", "Psychedelic", "Deep Space", "Sunset"];
+  const bgStyle = bgStyles[(seed * 2) % bgStyles.length];
   
-  // Mountain layers (3-5)
-  const mountainLayers = 3 + (seed * 3) % 3;
+  // Celestial objects
+  const hasSun = (seed * 7) % 10 > 6;
+  const hasMoon = (seed * 11) % 10 > 8;
+  const hasStars = (seed * 13) % 10 > 4;
   
-  // Water waves (6-10)
-  const waterWaves = 6 + (seed * 5) % 5;
+  // Crystal count (3-15)
+  const crystalCount = 3 + (seed * 7) % 13;
+  
+  // Crystal types
+  const crystalTypes = ["Polygon", "Star", "Diamond", "Prism"];
+  const dominantCrystalType = crystalTypes[(seed * 3) % crystalTypes.length];
+  
+  // Mountain layers (2-7)
+  const mountainLayers = 2 + (seed * 5) % 6;
+  
+  // Mountain style
+  const mountainStyles = ["Smooth", "Jagged", "Wavy"];
+  const dominantMountainStyle = mountainStyles[(seed * 9) % mountainStyles.length];
+  
+  // Water waves (5-12)
+  const waterWaves = 5 + (seed * 11) % 8;
+  
+  // Water style
+  const waterStyle = (seed * 17) % 2 === 0 ? "Smooth" : "Choppy";
   
   // Grid intensity
-  const gridIntensity = ["Low", "Medium", "High"][(seed * 2) % 3];
+  const gridStyles = ["Dense", "Normal", "Sparse"];
+  const gridStyle = gridStyles[(seed * 19) % gridStyles.length];
   
   // Wireframe crystals
   const wireframeCrystals = (seed * 13) % 100 > 60;
-  
-  // Crystal style
   const crystalStyle = wireframeCrystals ? "Wireframe" : "Solid";
   
-  // Time of day (based on background gradient)
-  const timeOfDay = ["Dusk", "Night", "Dawn"][(seed * 11) % 3];
+  // Glow effects
+  const hasGlow = (seed * 23) % 10 > 5;
   
   // Rarity traits
-  const hasSuperCrystals = crystalCount >= 11; // Rare
-  const hasMaxLayers = mountainLayers === 5; // Uncommon
-  const isWireframeStyle = wireframeCrystals; // Special
+  const hasMaxCrystals = crystalCount >= 13;
+  const hasMaxLayers = mountainLayers >= 6;
+  const hasAllCelestial = hasSun && hasMoon && hasStars;
+  const isWireframeStyle = wireframeCrystals;
   
   return {
-    palette: palette.name,
+    palette,
+    bgStyle,
+    hasSun,
+    hasMoon,
+    hasStars,
     crystalCount,
+    dominantCrystalType,
     mountainLayers,
+    dominantMountainStyle,
     waterWaves,
-    gridIntensity,
+    waterStyle,
+    gridStyle,
     crystalStyle,
-    timeOfDay,
-    hasSuperCrystals,
+    hasGlow,
+    hasMaxCrystals,
     hasMaxLayers,
+    hasAllCelestial,
     isWireframeStyle
   };
 }
@@ -70,11 +109,16 @@ function generateAttributes(tokenId) {
 // Generate rarity score (optional, for fun)
 function calculateRarity(attrs) {
   let score = 0;
-  if (attrs.hasSuperCrystals) score += 20;
+  if (attrs.hasMaxCrystals) score += 20;
   if (attrs.hasMaxLayers) score += 15;
+  if (attrs.hasAllCelestial) score += 25; // Very rare!
   if (attrs.isWireframeStyle) score += 10;
-  if (attrs.crystalCount >= 10) score += 10;
-  if (attrs.waterWaves >= 9) score += 5;
+  if (attrs.crystalCount >= 12) score += 10;
+  if (attrs.waterWaves >= 10) score += 5;
+  if (attrs.hasGlow) score += 8;
+  if (attrs.dominantCrystalType === "Prism") score += 7;
+  if (attrs.dominantCrystalType === "Star") score += 5;
+  if (attrs.bgStyle === "Psychedelic") score += 5;
   return score;
 }
 
@@ -103,8 +147,16 @@ function generateTokenMetadata(tokenId) {
         value: attrs.palette
       },
       {
+        name: "Background Style",
+        value: attrs.bgStyle
+      },
+      {
         name: "Crystal Count",
         value: attrs.crystalCount.toString()
+      },
+      {
+        name: "Crystal Type",
+        value: attrs.dominantCrystalType
       },
       {
         name: "Crystal Style",
@@ -115,16 +167,36 @@ function generateTokenMetadata(tokenId) {
         value: attrs.mountainLayers.toString()
       },
       {
+        name: "Mountain Style",
+        value: attrs.dominantMountainStyle
+      },
+      {
         name: "Water Waves",
         value: attrs.waterWaves.toString()
       },
       {
-        name: "Grid Intensity",
-        value: attrs.gridIntensity
+        name: "Water Style",
+        value: attrs.waterStyle
       },
       {
-        name: "Time of Day",
-        value: attrs.timeOfDay
+        name: "Grid Style",
+        value: attrs.gridStyle
+      },
+      {
+        name: "Has Sun",
+        value: attrs.hasSun ? "Yes" : "No"
+      },
+      {
+        name: "Has Moon",
+        value: attrs.hasMoon ? "Yes" : "No"
+      },
+      {
+        name: "Has Stars",
+        value: attrs.hasStars ? "Yes" : "No"
+      },
+      {
+        name: "Glow Effect",
+        value: attrs.hasGlow ? "Yes" : "No"
       },
       {
         name: "Rarity Score",
@@ -207,7 +279,16 @@ function generateStats() {
   const stats = {
     palettes: {},
     crystalCounts: {},
+    crystalTypes: {},
+    mountainStyles: {},
+    waterStyles: {},
     styles: { Solid: 0, Wireframe: 0 },
+    celestialCounts: {
+      sun: 0,
+      moon: 0,
+      stars: 0,
+      all: 0
+    },
     rarityDistribution: []
   };
   
@@ -221,8 +302,23 @@ function generateStats() {
     // Count crystal counts
     stats.crystalCounts[attrs.crystalCount] = (stats.crystalCounts[attrs.crystalCount] || 0) + 1;
     
+    // Count crystal types
+    stats.crystalTypes[attrs.dominantCrystalType] = (stats.crystalTypes[attrs.dominantCrystalType] || 0) + 1;
+    
+    // Count mountain styles
+    stats.mountainStyles[attrs.dominantMountainStyle] = (stats.mountainStyles[attrs.dominantMountainStyle] || 0) + 1;
+    
+    // Count water styles
+    stats.waterStyles[attrs.waterStyle] = (stats.waterStyles[attrs.waterStyle] || 0) + 1;
+    
     // Count styles
     stats.styles[attrs.crystalStyle]++;
+    
+    // Count celestial objects
+    if (attrs.hasSun) stats.celestialCounts.sun++;
+    if (attrs.hasMoon) stats.celestialCounts.moon++;
+    if (attrs.hasStars) stats.celestialCounts.stars++;
+    if (attrs.hasAllCelestial) stats.celestialCounts.all++;
     
     // Track rarity
     stats.rarityDistribution.push(rarity);
@@ -234,10 +330,31 @@ function generateStats() {
     console.log(`  ${palette}: ${count} (${(count/TOTAL_SUPPLY*100).toFixed(1)}%)`);
   });
   
+  console.log('\nCrystal Type Distribution:');
+  Object.entries(stats.crystalTypes).forEach(([type, count]) => {
+    console.log(`  ${type}: ${count} (${(count/TOTAL_SUPPLY*100).toFixed(1)}%)`);
+  });
+  
+  console.log('\nMountain Style Distribution:');
+  Object.entries(stats.mountainStyles).forEach(([style, count]) => {
+    console.log(`  ${style}: ${count} (${(count/TOTAL_SUPPLY*100).toFixed(1)}%)`);
+  });
+  
+  console.log('\nWater Style Distribution:');
+  Object.entries(stats.waterStyles).forEach(([style, count]) => {
+    console.log(`  ${style}: ${count} (${(count/TOTAL_SUPPLY*100).toFixed(1)}%)`);
+  });
+  
   console.log('\nCrystal Style Distribution:');
   Object.entries(stats.styles).forEach(([style, count]) => {
     console.log(`  ${style}: ${count} (${(count/TOTAL_SUPPLY*100).toFixed(1)}%)`);
   });
+  
+  console.log('\nCelestial Objects:');
+  console.log(`  Has Sun: ${stats.celestialCounts.sun} (${(stats.celestialCounts.sun/TOTAL_SUPPLY*100).toFixed(1)}%)`);
+  console.log(`  Has Moon: ${stats.celestialCounts.moon} (${(stats.celestialCounts.moon/TOTAL_SUPPLY*100).toFixed(1)}%)`);
+  console.log(`  Has Stars: ${stats.celestialCounts.stars} (${(stats.celestialCounts.stars/TOTAL_SUPPLY*100).toFixed(1)}%)`);
+  console.log(`  Has All Three: ${stats.celestialCounts.all} (${(stats.celestialCounts.all/TOTAL_SUPPLY*100).toFixed(1)}%) - ULTRA RARE!`);
   
   console.log('\nRarity Score Distribution:');
   const avgRarity = stats.rarityDistribution.reduce((a, b) => a + b, 0) / TOTAL_SUPPLY;
@@ -246,8 +363,11 @@ function generateStats() {
   console.log(`  Average: ${avgRarity.toFixed(1)}`);
   console.log(`  Range: ${minRarity} - ${maxRarity}`);
   
-  const highRarity = stats.rarityDistribution.filter(r => r >= 30).length;
-  console.log(`  High Rarity (30+): ${highRarity} (${(highRarity/TOTAL_SUPPLY*100).toFixed(1)}%)`);
+  const highRarity = stats.rarityDistribution.filter(r => r >= 40).length;
+  console.log(`  High Rarity (40+): ${highRarity} (${(highRarity/TOTAL_SUPPLY*100).toFixed(1)}%)`);
+  
+  const ultraRarity = stats.rarityDistribution.filter(r => r >= 60).length;
+  console.log(`  Ultra Rarity (60+): ${ultraRarity} (${(ultraRarity/TOTAL_SUPPLY*100).toFixed(1)}%)`);
 }
 
 // Run the generator
